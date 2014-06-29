@@ -6,8 +6,29 @@ OS ?= LINUX
 ifeq ($(OS), LINUX)  # also works on FreeBSD
 CC ?= gcc
 CFLAGS ?= -O2 -Wall
+
+# libusb version assignment
+# default is libusb version 0.1x
+# Some systems use libusb-1.x
+# either add "LIBUSB_VERSION=1" to the make command line, or
+# uncomment the following setting.
+# LIBUSB_VERSION := 1
+
+ifeq ($(LIBUSB_VERSION),0)
+# Force major version 0
+LIBUSB_NAME ?= usb-0.1
+LIBUSB_VERSION := 0
+else ifeq ($(LIBUSB_VERSION),1)
+LIBUSB_NAME := usb-1.0
+LIBUSB_VERSION := 1
+else
+# Default if nothing else is known
+LIBUSB_NAME ?= usb
+LIBUSB_VERSION := 0
+endif
+
 teensy_loader_cli: teensy_loader_cli.c
-	$(CC) $(CFLAGS) -s -DUSE_LIBUSB -o teensy_loader_cli teensy_loader_cli.c -lusb
+	$(CC) $(CFLAGS) -s -DUSE_LIBUSB -DLIBUSB_VERSION=$(LIBUSB_VERSION) -o teensy_loader_cli teensy_loader_cli.c -l$(LIBUSB_NAME)
 
 
 else ifeq ($(OS), WINDOWS)

@@ -99,7 +99,8 @@ int main(int argc, char **argv)
 		fprintf(stderr, "MCU type must be specified\n\n");
 		usage();
 	}
-	printf_verbose("Teensy Loader, Command Line, Version 2.0\n");
+	printf_verbose("Teensy Loader, Command Line, Version 2.1\n");
+	printf_verbose("Using libusb version is %d\n", LIBUSB_VERSION);
 
 	// read the intel hex file
 	// this is done first so any error is reported before using USB
@@ -196,6 +197,8 @@ int main(int argc, char **argv)
 /****************************************************************/
 
 #if defined(USE_LIBUSB)
+
+#if LIBUSB_VERSION != 1
 
 // http://libusb.sourceforge.net/doc/index.html
 #include <usb.h>
@@ -299,6 +302,114 @@ int hard_reboot(void)
 	if (r < 0) return 0;
 	return 1;
 }
+
+#else
+
+
+/****************************************************************/
+/*                                                              */
+/*             USB Access - libusb 1.0+ (Linux & FreeBSD)       */
+/*                                                              */
+/****************************************************************/
+
+/*
+ * Makefile or compiler command line should ensure that proper libusb
+ * include directory is in the include path:
+ * -I/usr/include/libusb1.0
+ */
+
+#include <libusb-1.0/libusb.h>
+
+libusb_device_handle * open_usb_device(int vid, int pid)
+{
+	libusb_device_handle* h;
+	char buf[128];
+	int r;
+
+	libusb_init(NULL);
+	h = libusb_open_device_with_vid_pid(NULL, vid, pid);
+	if (!h) {
+		printf_verbose("No device available for vid=%04x pid=%04x\n", vid, pid);
+		return NULL;
+	}
+
+	r = libusb_detach_kernel_driver(h, 0);
+	if (r < 0) {
+		libusb_close(h);
+		printf_verbose("Device is in use by \"%s\" driver\n", buf);
+		return NULL;
+	}
+	r = libusb_claim_interface(h, 0);
+	if (r < 0) {
+		libusb_close(h);
+		printf_verbose("Unable to claim interface, check USB permissions\n");
+		return NULL;
+	}
+
+	return h;
+}
+
+static libusb_device_handle *libusb_teensy_handle = NULL;
+
+int teensy_open(void)
+{
+	teensy_close();
+	libusb_teensy_handle = open_usb_device(0x16C0, 0x0478);
+	if (libusb_teensy_handle) return 1;
+	libusb_teensy_handle = open_usb_device(0x16C0, 0x048C); // testing only
+	if (libusb_teensy_handle) return 1;
+	return 0;
+}
+
+int teensy_write(void *buf, int len, double timeout)
+{
+	int r;
+
+	if (!libusb_teensy_handle) return 0;
+	while (timeout > 0) {
+		r = libusb_control_transfer(libusb_teensy_handle, 0x21, 9, 0x0200, 0,
+			(unsigned char *)buf, len, (int)(timeout * 1000.0));
+		if (r >= 0) return 1;
+		//printf("teensy_write, r=%d\n", r);
+		usleep(10000);
+		timeout -= 0.01;  // TODO: subtract actual elapsed time
+	}
+	return 0;
+}
+
+// testing only, delete me before release
+void teensy_dummy_stall(void)
+{
+	unsigned char buf[4096];
+        if (!libusb_teensy_handle) return;
+        printf("sending dummy stall, to increment BDT even/odd count\n");
+        libusb_control_transfer(libusb_teensy_handle, 0x21, 0x0A, 0x0000, 0, buf, 0, 4000);
+}
+
+
+void teensy_close(void)
+{
+	if (!libusb_teensy_handle) return;
+	libusb_release_interface(libusb_teensy_handle, 0);
+	libusb_close(libusb_teensy_handle);
+	libusb_teensy_handle = NULL;
+}
+
+int hard_reboot(void)
+{
+	libusb_device_handle *rebootor;
+	int r;
+
+	rebootor = open_usb_device(0x16C0, 0x0477);
+	if (!rebootor) return 0;
+	r = libusb_control_transfer(rebootor, 0x21, 9, 0x0200, 0, (unsigned char*)"reboot", 6, 100);
+	libusb_release_interface(rebootor, 0);
+	libusb_close(rebootor);
+	if (r < 0) return 0;
+	return 1;
+}
+
+#endif
 
 #endif
 
