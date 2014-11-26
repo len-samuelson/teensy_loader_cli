@@ -57,4 +57,8 @@ endif
 
 
 clean:
-	rm -f teensy_loader_cli teensy_loader_cli.exe
+	rm -f teensy_loader_cli
+	rm -f *~
+
+realclean:	clean
+	rm -f teensy_loader_cli.exe
