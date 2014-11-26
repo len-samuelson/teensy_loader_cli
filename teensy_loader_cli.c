@@ -313,11 +313,12 @@ int hard_reboot(void)
 /****************************************************************/
 
 /*
- * Makefile or compiler command line should ensure that proper libusb
- * include directory is in the include path:
- * -I/usr/include/libusb1.0
+ * Is it bad form to refer to the libusb-1.0 subdirectory of /usr/include?
+ * The subdirectory reference can be removed by adding
+ *      -I/usr/include/libusb1.0  "includes" option in the Makefile; that
+ *      would map nicely to the requirement that the Makefile needs to
+ *      refer to the usb library name.
  */
-
 #include <libusb-1.0/libusb.h>
 
 libusb_device_handle * open_usb_device(int vid, int pid)
